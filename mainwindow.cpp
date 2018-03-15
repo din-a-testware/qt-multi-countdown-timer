@@ -35,45 +35,47 @@ void MainWindow::on_listWidget_itemClicked(QListWidgetItem *item)
             if (endTime.msecsTo(currentDateTime) < timerTime) {
                 qint64 asdf = timerTime-(endTime.msecsTo(currentDateTime));
                 qDebug() << timerTime-(endTime.msecsTo(currentDateTime));
-                setTimeLabel(asdf,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString()+":"+QString::number(timerTime-(endTime.msecsTo(currentDateTime))));
+                setTimeLabel(asdf,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString()+":"+QString::number(timerTime-(endTime.msecsTo(currentDateTime))),endTime);
             } else {
                 qint64 asdf = timerTime-(endTime.msecsTo(currentDateTime));
                 timerList.at(ui->listWidget->currentItem()->data(Qt::UserRole).toInt())->stop();
                 qDebug() << "stopped";
 
-                setTimeLabel(0,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString()+":"+"stopped");
+                setTimeLabel(0,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString()+":"+"stopped",endTime);
             }
             } else {
                 qint64 asdf = timerTime-(endTime.msecsTo(currentDateTime));
-                setTimeLabel(asdf,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString()+":"+"inactive");
+                setTimeLabel(asdf,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString()+":"+"inactive",endTime);
             }
-
     }
 
     ui->lineEdit->setText(item->data(Qt::DisplayRole).toString());
 }
 
 //!! SET TIME LABEL
-void MainWindow::setTimeLabel(qint64 mseconds, QString title) {
+void MainWindow::setTimeLabel(qint64 mseconds, QString title, QDateTime timeoutDate) {
 
+    if (ui->listWidget->selectedItems().count() >0) {
+        ui->a_h->setValue(QDateTime::fromTime_t(mseconds/1000).toUTC().toString("hh").toInt());
+        ui->a_m->setValue(QDateTime::fromTime_t(mseconds/1000).toUTC().toString("mm").toInt());
+        ui->a_s->setValue(QDateTime::fromTime_t(mseconds/1000).toUTC().toString("ss").toInt());
+        ui->lineEdit->setText(title);
 
-
-//ui->timerlabel->setText(QDateTime::fromTime_t(mseconds/1000).toUTC().toString("hh:mm:ss"));
-//ui->timerlabel->setText(QDateTime::fromTime_t(mseconds/1000).toUTC().toString("hh")+"--"+QDateTime::fromTime_t(mseconds/1000).toUTC().toString("mm")+"-"+QDateTime::fromTime_t(mseconds/1000).toUTC().toString("ss"));
-    ui->a_h->setValue(QDateTime::fromTime_t(mseconds/1000).toUTC().toString("hh").toInt());
-    ui->a_m->setValue(QDateTime::fromTime_t(mseconds/1000).toUTC().toString("mm").toInt());
-    ui->a_s->setValue(QDateTime::fromTime_t(mseconds/1000).toUTC().toString("ss").toInt());
-    ui->lineEdit->setText(title);
-
+        QDateTime timeoutTime = QDateTime::currentDateTime();
+        timeoutTime.addMSecs(mseconds);
+        QString timeoutLabel = timeoutDate.toString("hh:mm:ss");
+        ui->timerlabel->setText(timeoutLabel);
+    }
 }
 
 //!! TIMEOUT
-void MainWindow::alarmTimerTimeout(QTimer *newTimer, QString title) {
+void MainWindow::alarmTimerTimeout(QTimer *newTimer, QString title, QListWidgetItem *currentListItem=NULL) {
 
     QDateTime currentDateTime = QDateTime::currentDateTime();
-    qint64 timerTime = ui->listWidget->currentItem()->data(Qt::UserRole+1).toInt();
 
     if (ui->listWidget->selectedItems().count() >0) {
+        qDebug() << "ausgewählt" << timerList.at(ui->listWidget->currentItem()->data(Qt::UserRole).toInt())->timerId();
+        qint64 timerTime = ui->listWidget->currentItem()->data(Qt::UserRole+1).toInt();
         if (newTimer->timerId() == timerList.at(ui->listWidget->currentItem()->data(Qt::UserRole).toInt())->timerId()) {
 
             QDateTime endTime = ui->listWidget->currentItem()->data(Qt::UserRole+2).toDateTime();
@@ -81,14 +83,33 @@ void MainWindow::alarmTimerTimeout(QTimer *newTimer, QString title) {
             if (endTime.msecsTo(currentDateTime)+1000 < timerTime) {
                 qint64 asdf = timerTime-(endTime.msecsTo(currentDateTime));
 
-                setTimeLabel(asdf,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString());
+                setTimeLabel(asdf,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString(),endTime);
             } else {
                 newTimer->stop();
-                /*QMessageBox msgBox;
-                msgBox.setText("Stopped.");
-                msgBox.exec();*/
-                qDebug() << "stopped";
-                setTimeLabel(0,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString()+":"+"stopped");
+                QMessageBox msgBox;
+                msgBox.setText("Stopped:" + title);
+                msgBox.exec();
+                setTimeLabel(0,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString()+":"+"stopped",endTime);
+                delete timerList.at(ui->listWidget->currentItem()->data(Qt::UserRole).toInt());
+                delete ui->listWidget->currentItem();
+            }
+        }
+    } else {
+        qint64 timerTime = currentListItem->data(Qt::UserRole+1).toInt();
+        if (newTimer->timerId() == timerList.at(currentListItem->data(Qt::UserRole).toInt())->timerId()) {
+            QDateTime endTime = currentListItem->data(Qt::UserRole+2).toDateTime();
+            if (endTime.msecsTo(currentDateTime)+1000 < timerTime) {
+                qint64 asdf = timerTime-(endTime.msecsTo(currentDateTime));
+                qDebug() << currentListItem->data(Qt::DisplayRole).toString()<< ":" << asdf;
+            } else {
+                newTimer->stop();
+                //qDebug() << "stopped nicht ausgewählten";
+                QMessageBox msgBox;
+                msgBox.setText("Stopped:" + currentListItem->data(Qt::DisplayRole).toString());
+                msgBox.exec();
+                setTimeLabel(0,currentListItem->data(Qt::DisplayRole).toString(),  currentListItem->data(Qt::UserRole+2).toDateTime());
+                delete timerList.at(currentListItem->data(Qt::UserRole).toInt());
+                delete currentListItem;
             }
         }
     }
@@ -133,7 +154,7 @@ void MainWindow::on_neu_clicked()
     //! CONNECTION COUNTDOWN
     connect(newTimer,&QTimer::timeout,[=]() {
 
-        alarmTimerTimeout(newTimer, titleString);
+        alarmTimerTimeout(newTimer, titleString,newTimerItem);
 
     });
     //! -------------
@@ -185,7 +206,6 @@ void MainWindow::on_pause_clicked()
 
     }
 
-
 }
 
 //! RESUME
@@ -224,7 +244,9 @@ void MainWindow::on_stop_clicked()
 {
     if (ui->listWidget->selectedItems().count() >0) {
         timerList.at(ui->listWidget->currentItem()->data(Qt::UserRole).toInt())->stop();
-        setTimeLabel(0,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString());
+        setTimeLabel(0,ui->listWidget->currentItem()->data(Qt::DisplayRole).toString(),  ui->listWidget->currentItem()->data(Qt::UserRole+2).toDateTime());
+        delete timerList.at(ui->listWidget->currentItem()->data(Qt::UserRole).toInt());
+        delete ui->listWidget->currentItem();
     }
 }
 
@@ -243,4 +265,79 @@ void MainWindow::on_test_clicked()
     QMessageBox msgBox;
     msgBox.setText("Stopped.");
     msgBox.exec();
+}
+
+//!! NEU 2
+void MainWindow::on_neu_2_clicked()
+{
+    int timerMsecs = ((ui->s->value())*1000)+
+                     ((ui->m->value())*60*1000)+
+                     ((ui->h->value())*60*60*1000);
+
+    QListWidgetItem *newTimerItem = new QListWidgetItem();
+    newTimerItem->setData(Qt::DisplayRole,ui->lineEdit->text());
+    newTimerItem->setData(Qt::UserRole+1,timerMsecs);                     //!! USER ROLE+1: INITIAL TIMER MSECS
+    ui->listWidget_2->addItem(newTimerItem);
+
+
+}
+
+//!! START 2
+void MainWindow::on_start_2_clicked()
+{
+    //! NEW TIMER
+    QTimer *newTimer = new QTimer(this);
+    newTimer->setInterval(1000);
+    //! -------------
+
+    //! DEFINE TIMER LIST ID AND ADD TO TIMER LIST
+    int lastID = timerList.count();
+    timerList.insert(lastID,newTimer);
+    //! -------------
+
+    //! GET TIMERMSECS
+    //int timerMsecs =  ui->listWidget_2->currentItem()->data(Qt::UserRole+1).toInt();
+
+    int timerMsecs = (ui->s->value()*1000)+
+                     (ui->m->value()*60*1000)+
+                     (ui->h->value()*60*60*1000);
+
+    //! -------------
+
+    //! END TIME
+    QDateTime endTime = QDateTime::currentDateTime();
+              endTime.addMSecs(timerMsecs);
+    //! -------------
+
+    //! ROLES
+    QString titleString = ui->lineEdit->text();
+    //! -------------
+
+    //! NEW LISTWIDGET ITEM FOR ACTIVE LIST
+    QListWidgetItem *newTimerItem = new QListWidgetItem();
+    newTimerItem->setData(Qt::DisplayRole,titleString);
+    newTimerItem->setData(Qt::UserRole,lastID);                     //!! USER ROLE: ID IN TIMERLIST
+    newTimerItem->setData(Qt::UserRole+1,timerMsecs);               //!! USER ROLE+1: INITIAL TIMER MSECS
+    newTimerItem->setData(Qt::UserRole+2, endTime);                 //!! USER ROLE+2: INITIAL ENDTIME
+    ui->listWidget->addItem(newTimerItem);
+    //! -------------
+
+    //! CONNECTION COUNTDOWN
+    connect(newTimer,&QTimer::timeout,[=]() {
+
+        alarmTimerTimeout(newTimer, titleString, newTimerItem);
+
+    });
+    //! -------------
+
+    timerList.at(lastID)->start();
+
+}
+
+void MainWindow::on_listWidget_2_itemClicked(QListWidgetItem *item)
+{
+    ui->lineEdit->setText(item->data(Qt::DisplayRole).toString());
+    ui->s->setValue(item->data(Qt::UserRole+1).toInt()/1000);
+    ui->m->setValue(item->data(Qt::UserRole+1).toInt()/1000/60);
+    ui->h->setValue(item->data(Qt::UserRole+1).toInt()/1000/60/60);
 }
